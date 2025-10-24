@@ -3,6 +3,9 @@ const context = canvas.getContext("2d");
 context.scale(30, 30); // scale for blocks
 
 const scoreElement = document.getElementById("score");
+const startBtn = document.getElementById("startBtn");
+const pauseBtn = document.getElementById("pauseBtn");
+const restartBtn = document.getElementById("restartBtn");
 
 const ROWS = 20;
 const COLS = 10;
@@ -18,7 +21,37 @@ const colors = [
   "#00C9A7",
 ];
 
-// Tetromino shapes
+// ======== SOUND (no audio files) =========
+function playSound(
+  frequency = 440,
+  duration = 0.1,
+  type = "sine",
+  volume = 0.2
+) {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      audioCtx.currentTime + duration
+    );
+
+    oscillator.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + duration);
+  } catch (e) {
+    console.warn("Audio playback not supported:", e);
+  }
+}
+
+// ======== TETROMINO DATA =========
 const tetrominoes = {
   I: [
     [
@@ -140,15 +173,13 @@ function createMatrix(w, h) {
   return matrix;
 }
 
-// ✅ Draw blocks + per-block outline
+// Draw blocks (with per-block grid)
 function drawMatrix(matrix, offset) {
   matrix.forEach((row, y) => {
     row.forEach((value, x) => {
       if (value !== 0) {
         context.fillStyle = colors[value];
         context.fillRect(x + offset.x, y + offset.y, 1, 1);
-
-        // Outline (visible grid on blocks)
         context.strokeStyle = "rgba(255,255,255,0.25)";
         context.lineWidth = 0.05;
         context.strokeRect(x + offset.x, y + offset.y, 1, 1);
@@ -157,7 +188,7 @@ function drawMatrix(matrix, offset) {
   });
 }
 
-// ✅ Background grid overlay
+// Draw faint background grid
 function drawGrid() {
   context.strokeStyle = "rgba(255,255,255,0.1)";
   context.lineWidth = 0.02;
@@ -208,6 +239,7 @@ function rotate(matrix, dir) {
 
 function sweep() {
   let rowCount = 1;
+  let cleared = false;
   outer: for (let y = board.length - 1; y >= 0; y--) {
     for (let x = 0; x < board[y].length; x++) {
       if (board[y][x] === 0) continue outer;
@@ -215,10 +247,11 @@ function sweep() {
     const row = board.splice(y, 1)[0].fill(0);
     board.unshift(row);
     score += rowCount * 10;
-    playSound(600, 0.15, "triangle", 0.3); // ✅ line clear sound
     rowCount *= 2;
     y++;
+    cleared = true;
   }
+  if (cleared) playSound(600, 0.15, "triangle", 0.3); // line clear sound
 }
 
 function updateScore() {
@@ -243,6 +276,12 @@ function spawnPiece() {
   piece = createPiece(pieceType);
   nextPieceType = Object.keys(tetrominoes)[Math.floor(Math.random() * 7)];
   fastDrop = false;
+
+  // Game over detection
+  if (collide(board, piece)) {
+    running = false;
+    alert("Game Over!");
+  }
 }
 
 let board = createMatrix(COLS, ROWS);
@@ -251,39 +290,45 @@ let nextDrop = Date.now();
 let dropInterval = 1000;
 let score = 0;
 let fastDrop = false;
+let running = false;
 
 function draw() {
   context.fillStyle = "rgba(0,0,0,0.1)";
   context.fillRect(0, 0, COLS, ROWS);
-
-  drawGrid(); // background grid
+  drawGrid();
   drawMatrix(board, { x: 0, y: 0 });
-  drawMatrix(piece.matrix, piece.pos); // piece also has outlines now
+  drawMatrix(piece.matrix, piece.pos);
 }
 
 function drawNext() {
   const nextCanvas = document.getElementById("next");
+  if (!nextCanvas) return; // safety
   const nextCtx = nextCanvas.getContext("2d");
 
   nextCtx.setTransform(1, 0, 0, 1, 0, 0);
   nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
 
-  nextCtx.scale(20, 20);
+  nextCtx.scale(20, 20); // scale for preview
+
   const matrix = tetrominoes[nextPieceType][0];
+  const offsetX = 2 - Math.floor(matrix[0].length / 2);
+  const offsetY = 2 - Math.floor(matrix.length / 2);
+
   matrix.forEach((row, y) => {
     row.forEach((value, x) => {
       if (value !== 0) {
         nextCtx.fillStyle = colors[value];
-        nextCtx.fillRect(x + 0.5, y + 0.5, 1, 1);
+        nextCtx.fillRect(x + offsetX, y + offsetY, 1, 1);
         nextCtx.strokeStyle = "rgba(255,255,255,0.3)";
         nextCtx.lineWidth = 0.05;
-        nextCtx.strokeRect(x + 0.5, y + 0.5, 1, 1);
+        nextCtx.strokeRect(x + offsetX, y + offsetY, 1, 1);
       }
     });
   });
 }
 
 function update() {
+  if (!running) return;
   const now = Date.now();
   const interval = fastDrop ? 50 : dropInterval;
 
@@ -293,22 +338,44 @@ function update() {
       piece.pos.y--;
       merge(board, piece);
       sweep();
-      playSound(200, 0.08, "square", 0.2); // falling block sound
+      playSound(200, 0.08, "square", 0.2); // landing sound
       spawnPiece();
       fastDrop = false;
     }
-
     nextDrop = now;
   }
 
   draw();
   updateScore();
-  requestAnimationFrame(update);
   drawNext();
+  requestAnimationFrame(update);
 }
 
-// Controls
+// ======== BUTTON CONTROLS =========
+startBtn.addEventListener("click", () => {
+  if (!running) {
+    running = true;
+    update();
+  }
+});
+
+pauseBtn.addEventListener("click", () => {
+  running = !running;
+  if (running) update();
+});
+
+restartBtn.addEventListener("click", () => {
+  board = createMatrix(COLS, ROWS);
+  score = 0;
+  updateScore();
+  spawnPiece();
+  running = true;
+  update();
+});
+
+// ======== KEYBOARD CONTROLS =========
 document.addEventListener("keydown", (event) => {
+  if (!running) return;
   if (event.key === "ArrowLeft") {
     piece.pos.x--;
     if (collide(board, piece)) piece.pos.x++;
@@ -327,23 +394,20 @@ document.addEventListener("keyup", (event) => {
   if (event.key === "ArrowDown") fastDrop = false;
 });
 
-// Touch controls
+// ======== TOUCH CONTROLS =========
 let touchStartX = 0,
-  touchEndX = 0,
   touchStartY = 0,
+  touchEndX = 0,
   touchEndY = 0;
-
 canvas.addEventListener("touchstart", (e) => {
   touchStartX = e.changedTouches[0].screenX;
   touchStartY = e.changedTouches[0].screenY;
 });
-
 canvas.addEventListener("touchend", (e) => {
   touchEndX = e.changedTouches[0].screenX;
   touchEndY = e.changedTouches[0].screenY;
   const dx = touchEndX - touchStartX;
   const dy = touchEndY - touchStartY;
-
   if (Math.abs(dx) > Math.abs(dy)) {
     if (dx > 30) {
       piece.pos.x++;
@@ -362,40 +426,4 @@ canvas.addEventListener("touchend", (e) => {
     }
   }
 });
-
-canvas.addEventListener("touchcancel", () => {
-  fastDrop = false;
-});
-
-update();
-
-// Simple sound generator using Web Audio API
-function playSound(
-  frequency = 440,
-  duration = 0.1,
-  type = "sine",
-  volume = 0.2
-) {
-  try {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
-
-    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(
-      0.001,
-      audioCtx.currentTime + duration
-    );
-
-    oscillator.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + duration);
-  } catch (e) {
-    console.warn("Audio playback not supported:", e);
-  }
-}
+canvas.addEventListener("touchcancel", () => (fastDrop = false));
