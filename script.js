@@ -6,6 +6,7 @@ const scoreElement = document.getElementById("score");
 const startBtn = document.getElementById("startBtn");
 const pauseBtn = document.getElementById("pauseBtn");
 const restartBtn = document.getElementById("restartBtn");
+const toggleTouchBtn = document.getElementById("toggleTouchBtn");
 
 const ROWS = 20;
 const COLS = 10;
@@ -353,6 +354,12 @@ function update() {
 
 // ======== BUTTON CONTROLS =========
 startBtn.addEventListener("click", () => {
+  startBtn.style.display = "none";
+
+  pauseBtn.style.display = "inline-block";
+  restartBtn.style.display = "inline-block";
+  toggleTouchBtn.style.display = "inline-block";
+
   if (!running) {
     running = true;
     update();
@@ -394,36 +401,106 @@ document.addEventListener("keyup", (event) => {
   if (event.key === "ArrowDown") fastDrop = false;
 });
 
-// ======== TOUCH CONTROLS =========
+// ======== TOUCH CONTROLS (switchable) =========
+let useNewTouchControls = true; // 🔁 set false to use old version
+
 let touchStartX = 0,
   touchStartY = 0,
   touchEndX = 0,
-  touchEndY = 0;
+  touchEndY = 0,
+  touchStartTime = 0,
+  lastMoveX = 0;
+
 canvas.addEventListener("touchstart", (e) => {
-  touchStartX = e.changedTouches[0].screenX;
-  touchStartY = e.changedTouches[0].screenY;
+  const t = e.changedTouches[0];
+  touchStartX = t.screenX;
+  touchStartY = t.screenY;
+  lastMoveX = t.screenX;
+  touchStartTime = Date.now();
 });
-canvas.addEventListener("touchend", (e) => {
-  touchEndX = e.changedTouches[0].screenX;
-  touchEndY = e.changedTouches[0].screenY;
-  const dx = touchEndX - touchStartX;
-  const dy = touchEndY - touchStartY;
-  if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx > 30) {
+
+canvas.addEventListener("touchmove", (e) => {
+  if (!useNewTouchControls) return; // ⏩ old mode doesn't use drag move
+
+  const t = e.changedTouches[0];
+  const dx = t.screenX - lastMoveX;
+  const dy = t.screenY - touchStartY;
+
+  // horizontal drag: move every 30px of movement
+  if (Math.abs(dx) > 30) {
+    if (dx > 0) {
       piece.pos.x++;
       if (collide(board, piece)) piece.pos.x--;
-    } else if (dx < -30) {
+    } else {
       piece.pos.x--;
       if (collide(board, piece)) piece.pos.x++;
     }
-  } else {
+    lastMoveX = t.screenX;
+  }
+
+  // vertical drag down: fast drop
+  if (dy > 40) fastDrop = true;
+});
+
+canvas.addEventListener("touchend", (e) => {
+  const t = e.changedTouches[0];
+  touchEndX = t.screenX;
+  touchEndY = t.screenY;
+  const dx = touchEndX - touchStartX;
+  const dy = touchEndY - touchStartY;
+  const dt = Date.now() - touchStartTime;
+
+  if (useNewTouchControls) {
+    // --- NEW touch controls ---
+    // swipe down
     if (dy > 30) {
       fastDrop = true;
       setTimeout(() => (fastDrop = false), 1000);
-    } else if (dy < -30) {
+    }
+    // tap to rotate
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 200) {
+      rotate(piece.matrix, 1);
+      if (collide(board, piece)) rotate(piece.matrix, -1);
+    }
+  } else {
+    // --- OLD touch controls ---
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 30) {
+        piece.pos.x++;
+        if (collide(board, piece)) piece.pos.x--;
+      } else if (dx < -30) {
+        piece.pos.x--;
+        if (collide(board, piece)) piece.pos.x++;
+      }
+    } else {
+      if (dy > 30) {
+        fastDrop = true;
+        setTimeout(() => (fastDrop = false), 1000);
+      }
+    }
+
+    // tap to rotate (same as old)
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 200) {
       rotate(piece.matrix, 1);
       if (collide(board, piece)) rotate(piece.matrix, -1);
     }
   }
+
+  if(useNewTouchControls) fastDrop = false;
 });
+
 canvas.addEventListener("touchcancel", () => (fastDrop = false));
+
+// ======== TOUCH CONTROL TOGGLE BUTTON =========
+
+
+toggleTouchBtn.addEventListener("click", () => {
+  useNewTouchControls = !useNewTouchControls;
+  toggleTouchBtn.textContent = useNewTouchControls ? "👆" : "🧭";
+  
+  // Optional: give quick feedback
+  toggleTouchBtn.style.background = "rgba(0,255,100,0.3)";
+  setTimeout(() => {
+    toggleTouchBtn.style.background = "rgba(255,255,255,0.2)";
+  }, 300);
+});
