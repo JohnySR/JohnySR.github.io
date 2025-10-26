@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+   <meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+/>
     <title>Glassy Tetris</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -10,14 +13,24 @@
     <div class="container">
       <div class="tetris-container">
         <canvas id="tetris" width="300" height="600"></canvas>
+        <div id="gameOverlay" class="glass-overlay">
+  <h2 id="overlayMessage">Glassy Tetris</h2>
+  <div class="overlay-buttons">
+    <button id="startGameBtn">▶️ Start</button>
+    <button id="resumeGameBtn" style="display:none;">▶️ Resume</button>
+    <button id="restartGameBtn" style="display:none;">🔁 Restart</button>
+  </div>
+</div>
+
         <div class="score-board">
           <h2>Score</h2>
           <span id="score">0</span>
           <div class="controls">
-            <button id="startBtn">▶️ Start</button>
+            <!-- <button id="startBtn">▶️ Start</button> -->
             <button id="pauseBtn" style="display: none;">⏸ Pause</button>
-            <button id="restartBtn" style="display: none;">🔁 Restart</button>
+            <!-- <button id="restartBtn" style="display: none;">🔁 Restart</button> -->
             <button id="toggleTouchBtn" style="display: none;">👆</button>
+            <button id="toggleFastDropMovementBtn" style="display: none;">🚫</button>
           </div>
 
           <div class="glass-card">

@@ -3,10 +3,17 @@ const context = canvas.getContext("2d");
 context.scale(30, 30); // scale for blocks
 
 const scoreElement = document.getElementById("score");
-const startBtn = document.getElementById("startBtn");
+const startBtn = document.getElementById("startGameBtn");
 const pauseBtn = document.getElementById("pauseBtn");
-const restartBtn = document.getElementById("restartBtn");
+const restartBtn = document.getElementById("restartGameBtn");
 const toggleTouchBtn = document.getElementById("toggleTouchBtn");
+const toggleFastDropMovmentBtn = document.getElementById("toggleFastDropMovementBtn");
+
+const overlay = document.getElementById("gameOverlay");
+const overlayMessage = document.getElementById("overlayMessage");
+const startGameBtn = document.getElementById("startGameBtn");
+const resumeGameBtn = document.getElementById("resumeGameBtn");
+const restartGameBtn = document.getElementById("restartGameBtn");
 
 const ROWS = 20;
 const COLS = 10;
@@ -281,7 +288,7 @@ function spawnPiece() {
   // Game over detection
   if (collide(board, piece)) {
     running = false;
-    alert("Game Over!");
+     showOverlay("💀 Game Over", false, false, true);
   }
 }
 
@@ -359,16 +366,24 @@ startBtn.addEventListener("click", () => {
   pauseBtn.style.display = "inline-block";
   restartBtn.style.display = "inline-block";
   toggleTouchBtn.style.display = "inline-block";
+  toggleFastDropMovmentBtn.style.display = "inline-block";
 
+  
   if (!running) {
     running = true;
+
+    hideOverlay();
     update();
   }
 });
 
 pauseBtn.addEventListener("click", () => {
+  
   running = !running;
-  if (running) update();
+  if (running) {
+     hideOverlay();
+    update();
+  }else showOverlay("⏸ Game Paused", false, true, true);
 });
 
 restartBtn.addEventListener("click", () => {
@@ -377,6 +392,8 @@ restartBtn.addEventListener("click", () => {
   updateScore();
   spawnPiece();
   running = true;
+  hideOverlay();
+
   update();
 });
 
@@ -403,13 +420,15 @@ document.addEventListener("keyup", (event) => {
 
 // ======== TOUCH CONTROLS (switchable) =========
 let useNewTouchControls = true; // 🔁 set false to use old version
+let canMoveWhileFastDrop = false; 
 
 let touchStartX = 0,
   touchStartY = 0,
   touchEndX = 0,
   touchEndY = 0,
   touchStartTime = 0,
-  lastMoveX = 0;
+  lastMoveX = 0,
+  xMoved = false;
 
 canvas.addEventListener("touchstart", (e) => {
   const t = e.changedTouches[0];
@@ -417,6 +436,7 @@ canvas.addEventListener("touchstart", (e) => {
   touchStartY = t.screenY;
   lastMoveX = t.screenX;
   touchStartTime = Date.now();
+  xMoved = false;
 });
 
 canvas.addEventListener("touchmove", (e) => {
@@ -425,9 +445,9 @@ canvas.addEventListener("touchmove", (e) => {
   const t = e.changedTouches[0];
   const dx = t.screenX - lastMoveX;
   const dy = t.screenY - touchStartY;
-
+  xMoved = false;
   // horizontal drag: move every 30px of movement
-  if (Math.abs(dx) > 30) {
+  if (Math.abs(dx) > 30 && (!fastDrop || canMoveWhileFastDrop)) {
     if (dx > 0) {
       piece.pos.x++;
       if (collide(board, piece)) piece.pos.x--;
@@ -436,10 +456,11 @@ canvas.addEventListener("touchmove", (e) => {
       if (collide(board, piece)) piece.pos.x++;
     }
     lastMoveX = t.screenX;
+    xMoved = true;
   }
 
-  // vertical drag down: fast drop
-  if (dy > 40) fastDrop = true;
+  // // vertical drag down: fast drop
+  // if (dy > 40) fastDrop = true;
 });
 
 canvas.addEventListener("touchend", (e) => {
@@ -452,25 +473,22 @@ canvas.addEventListener("touchend", (e) => {
 
   if (useNewTouchControls) {
     // --- NEW touch controls ---
-    // swipe down
-    if (dy > 30) {
-      fastDrop = true;
-      setTimeout(() => (fastDrop = false), 1000);
-    }
-    // tap to rotate
-    if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 200) {
-      rotate(piece.matrix, 1);
-      if (collide(board, piece)) rotate(piece.matrix, -1);
-    }
+    // // swipe down
+    // if (dx < 30 && dy > 30) {
+    //   fastDrop = true;
+    //   setTimeout(() => (fastDrop = false), 1000);
+    // }
   } else {
     // --- OLD touch controls ---
-    if (Math.abs(dx) > Math.abs(dy)) {
+    if (Math.abs(dx) > Math.abs(dy) && (!fastDrop || canMoveWhileFastDrop)) {
       if (dx > 30) {
         piece.pos.x++;
         if (collide(board, piece)) piece.pos.x--;
+        xMoved = true;
       } else if (dx < -30) {
         piece.pos.x--;
         if (collide(board, piece)) piece.pos.x++;
+        xMoved = true;
       }
     } else {
       if (dy > 30) {
@@ -478,29 +496,77 @@ canvas.addEventListener("touchend", (e) => {
         setTimeout(() => (fastDrop = false), 1000);
       }
     }
-
-    // tap to rotate (same as old)
-    if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 200) {
+  }
+  // swipe down
+  if (Math.abs(dx) < 30 && dy > 30 && !fastDrop) {
+    fastDrop = true;
+    setTimeout(() => (fastDrop = false), 1000);
+  }
+  // tap to rotate (same as old)
+  if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 200) {
+    if (fastDrop) fastDrop = false;
+    else {
       rotate(piece.matrix, 1);
       if (collide(board, piece)) rotate(piece.matrix, -1);
     }
   }
-
-  if(useNewTouchControls) fastDrop = false;
+  //  if (fastDrop) fastDrop = false;
+  // if (useNewTouchControls) fastDrop = false;
 });
 
 canvas.addEventListener("touchcancel", () => (fastDrop = false));
 
 // ======== TOUCH CONTROL TOGGLE BUTTON =========
 
-
 toggleTouchBtn.addEventListener("click", () => {
   useNewTouchControls = !useNewTouchControls;
   toggleTouchBtn.textContent = useNewTouchControls ? "👆" : "🧭";
-  
+
   // Optional: give quick feedback
   toggleTouchBtn.style.background = "rgba(0,255,100,0.3)";
   setTimeout(() => {
     toggleTouchBtn.style.background = "rgba(255,255,255,0.2)";
   }, 300);
+});
+
+toggleFastDropMovmentBtn.addEventListener("click", () => {
+  canMoveWhileFastDrop = !canMoveWhileFastDrop;
+  toggleFastDropMovmentBtn.textContent = canMoveWhileFastDrop ? "✅" : "🚫";
+
+  // Optional: give quick feedback
+  toggleFastDropMovmentBtn.style.background = "rgba(0,255,100,0.3)";
+  setTimeout(() => {
+    toggleFastDropMovmentBtn.style.background = "rgba(255,255,255,0.2)";
+  }, 300);
+});
+
+
+
+
+document.addEventListener(
+  "touchend",
+  (e) => {
+    if (e.detail > 1) {
+      e.preventDefault(); // prevents double-tap zoom
+    }
+  },
+  { passive: false }
+);
+
+function showOverlay(message, showStart = false, showResume = false, showRestart = false) {
+  overlay.classList.remove("hidden");
+  overlayMessage.textContent = message;
+  startGameBtn.style.display = showStart ? "inline-block" : "none";
+  resumeGameBtn.style.display = showResume ? "inline-block" : "none";
+  restartGameBtn.style.display = showRestart ? "inline-block" : "none";
+}
+
+function hideOverlay() {
+  overlay.classList.add("hidden");
+}
+resumeGameBtn.addEventListener("click", () => {
+  gameState = "playing";
+  running = true;
+  hideOverlay();
+  update();
 });
